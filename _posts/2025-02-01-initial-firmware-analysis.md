@@ -1,8 +1,10 @@
-ConnectX-5 Firmware tooling and analysis
-========================================
+---
+title: ConnectX-5 Firmware tooling and initial analysis
+author: Jonas Rudloff
+layout: post
+published: true
+---
 
-Introduction
-------------
 NVIDIA/Mellanox has made a series of smart network interface cards(SmartNICs/NICs) called ConnectX primarily for server and datacenter uses. The ConnectX devices also seem to form a basis for the BlueField family of NICs(basically a ConnectX + user controllable embedded ARM system running Linux) as well as some of their switch technology.
 
 The features set of these NICs are quite complex and includes at least the following:
@@ -24,19 +26,19 @@ For this article we will analyse the firmware named:
 `fw-ConnectX5-rel-16_35_4030-MCX566M-GDA_Ax_Bx-UEFI-14.29.15-FlexBoot-3.6.902.bin`
 
 Firmware tooling
-----------------
+================
 NVIDIA publishes open-source drivers[4] and tooling[5] of interacting with these SmartNICs.
 
 The drivers are pretty high quality with a lot of the NICs features documented and some very useful debug and tracing capabilities.
 
 `mstflint`
-----------
+==========
 `mstflint` is the firmware management tool, this is the their own description from their documentation:
 ```
 flint is a FW (firmware) burning and flash memory operations tool for Mellanox Infiniband HCAs, Ethernet NIC cards, and switch devices.
 ```
 
-a few really interesting commands are:
+A few really interesting commands are:
 ```
 burn|b [-ir]        : Burn flash. Use "-ir burn" flag to perform image reactivation prior burning.
 query|q [full]      : Query misc. flash/firmware characteristics, use "full" to get more information.
@@ -66,8 +68,8 @@ FS4 failsafe image
 ... snip: sections we don't care about ...
 -I- FW image verification succeeded. Image is bootable.
 ```
-These section of the firmware we can extract with either `dd` or byte slicing in python. We decided to have a look at `IRON_PREP_CODE` first,
 
+These section of the firmware we can extract with either `dd` or byte slicing in python. We decided to have a look at `IRON_PREP_CODE` first,
 ```
 $ dd if=fw.bin of=IRON_PREP_CODE bs=1 iseek=$((0x7000)) count=$((0x015614))
 87572+0 records in
@@ -98,7 +100,6 @@ $ phd -c 0x100 IRON_PREP_CODE
 ```
 
 Initial observations:
-
 - `00000000 - 00000020`: of the first 32 bytes of the firmware each the byte sequence `6c 20` repeats and always at aligned offsets.
 - `000000b0` the first 4 bytes `48 03 00 bc` is present again followed by a similar pattern of `6c 20`.
 - `00000090 - 000000b0`: there is a pattern of `64 3x 00 yy` where the `yy` matches with the first sequence of `6c 20 zz yy` at the beginning.
@@ -131,7 +132,7 @@ return / indirect jump to return address
 ```
 
 Guessing an instruction set
----------------------------
+===========================
 According to some documentation, error messages in the kernel driver, and the source code for the user space tooling, these NICs contains a(or multiple) embedded processors called with an architecture called iRISC. There is no description of the architecture anywhere on the internet, however we can make some educated guesses on how they work based on prior work.
 
 The MIPS instruction set has roughly the following format:
@@ -262,9 +263,11 @@ Now we make make a few more guesses:
 - `opcode=0x00`: most likely a addition instruction, `rd = rs + imm16`
 - `opcode=0x1c`: is some kind of store + addition, because `0xfe2 ~= 0x20`, but the low 2bits are being weird.
 
-In addition store operations have their offset split into multiple sections:
+In addition store operations have their offset split into multiple bit sections:
 
-`| opcode, 6bit | rs, 5bit | hi-offset, 5bit| rt, 5bit | lo-offset, 11bit |`
+```
+| 6bit opcode | 5bit rs | 5bit hi-offset | 5bit rt | 11bit lo-offset |
+```
 
 These assumptions yields the following disassembly:
 
@@ -321,7 +324,7 @@ These assumptions yields the following disassembly:
 ```
 
 Conclusion:
------------
+===========
 
 The firmware for ConnectX-5 is a viable target for reverse engineering but there is a lot of work to be done.
 
@@ -340,7 +343,7 @@ So far we have learned the following about the iRISC instructions set:
 - `opcode = 0x3f`: Used for return, and other things.
 
 References:
------------
+===========
 [1] https://network.nvidia.com/files/doc-2020/pb-connectx-5-en-card.pdf
 
 [2] https://www.nvidia.com/content/dam/en-zz/Solutions/networking/infiniband-adapters/infiniband-connectx7-data-sheet.pdf
