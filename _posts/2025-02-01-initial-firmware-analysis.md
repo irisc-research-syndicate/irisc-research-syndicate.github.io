@@ -2,10 +2,11 @@
 title: ConnectX-5 Firmware tooling and initial analysis
 author: Jonas Rudloff
 layout: post
-published: true
 ---
 
-NVIDIA/Mellanox has made a series of smart network interface cards(SmartNICs/NICs) called ConnectX primarily for server and datacenter uses. The ConnectX devices also seem to form a basis for the BlueField family of NICs(basically a ConnectX + user controllable embedded ARM system running Linux) as well as some of their switch technology.
+NVIDIA/Mellanox has made a series of smart network interface cards(SmartNICs/NICs) called ConnectX primarily for server and datacenter uses. In this series of articles we will take a look at its firmware.
+
+The ConnectX family of devices also seem to form a basis for the BlueField family of NICs(basically a ConnectX + user controllable embedded ARM system running Linux) as well as some of their switch technology.
 
 The features set of these NICs are quite complex and includes at least the following:
 
@@ -261,7 +262,7 @@ Now we have the following:
 Now we make make a few more guesses:
 
 - `opcode=0x00`: most likely a addition instruction, `rd = rs + imm16`
-- `opcode=0x1c`: is some kind of store + addition, because `0xfe2 ~= 0x20`, but the low 2bits are being weird.
+- `opcode=0x1c`: is some kind of store + addition, because `0xfe2 ~= -0x20`, but the low 2bits are being weird.
 
 In addition store operations have their offset split into multiple bit sections:
 
