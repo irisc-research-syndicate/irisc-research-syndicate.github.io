@@ -4,9 +4,9 @@ author: Jonas Rudloff
 layout: post
 ---
 
-NVIDIA/Mellanox has made a series of smart network interface cards(SmartNICs/NICs) called ConnectX primarily for server and datacenter uses. In this series of articles we will take a look at its firmware.
+NVIDIA/Mellanox has made a series of smart network interface cards(SmartNICs/NICs) called ConnectX primarily for server and datacenter uses. In this series of articles we will take a look at its firmware, and try to reverse engineer the instruction set for the iRISC processor.
 
-The ConnectX family of devices also seem to form a basis for the BlueField family of NICs(basically a ConnectX + user controllable embedded ARM system running Linux) as well as some of their switch technology.
+The ConnectX family of devices also seem to form a basis for the BlueField family of NICs which is basically a ConnectX with a user controllable embedded ARM system running Linux as well as some of their switch technology.
 
 The features set of these NICs are quite complex and includes at least the following:
 
@@ -32,8 +32,6 @@ NVIDIA publishes open-source drivers[4] and tooling[5] of interacting with these
 
 The drivers are pretty high quality with a lot of the NICs features documented and some very useful debug and tracing capabilities.
 
-`mstflint`
-==========
 `mstflint` is the firmware management tool, this is the their own description from their documentation:
 ```
 flint is a FW (firmware) burning and flash memory operations tool for Mellanox Infiniband HCAs, Ethernet NIC cards, and switch devices.
@@ -138,8 +136,9 @@ According to some documentation, error messages in the kernel driver, and the so
 
 The MIPS instruction set has roughly the following format:
 ```
-| 6bit opcode | 5bit reg | 5bit reg | 5bit | 11bit immidiate |
-| 6bit opcode | 5bit reg | 5bit reg |    16bit immidiate     |
+I-type: | 6bit opcode | 5bit reg | 5bit reg | 5bit | 11bit immidiate |
+R-type: | 6bit opcode | 5bit reg | 5bit reg |    16bit immidiate     |
+J-type: | 6bit opcode |            26bit jump offset                 |
 ```
 
 Assuming that the iRISC as a similar layout, we can make a very primitive disassembler:
@@ -159,7 +158,6 @@ for i, word in enumerate(map(lambda d: u32(d, endian="big"), group(4, read(sys.a
     imm11 = word & 0x7ff
     imm16 = word & 0xffff
     print(f"{address:08x}:\t{word:08x}\top{op:02x} r{rs}, r{rd}, r{rt}, {imm16:#06x}")
-
 ```
 
 This assembler gives us the following output:
@@ -265,13 +263,13 @@ Now we make make a few more guesses:
 - `opcode=0x1c`: is some kind of store + addition, because `0xfe2 ~= -0x20`, but the low 2bits are being weird.
 
 In addition store operations have their offset split into multiple bit sections:
-
 ```
 | 6bit opcode | 5bit rs | 5bit hi-offset | 5bit rt | 11bit lo-offset |
 ```
 
-These assumptions yields the following disassembly:
+This gives the store instruction 16 bits of offset just like the load instruction
 
+These assumptions yields the following disassembly:
 ```
 00000000:       480300bc        unk.12 r0, r3, r0, 0x00bc
 00000004:       6c201806        st.d r3, r1, 0x0006
@@ -324,6 +322,7 @@ These assumptions yields the following disassembly:
 000000c0:       6c20b80a        st.d r23, r1, 0x000a
 ```
 
+
 Conclusion:
 ===========
 
@@ -331,7 +330,7 @@ The firmware for ConnectX-5 is a viable target for reverse engineering but there
 
 So far we have learned the following about the iRISC instructions set:
 
-- Big Endian
+- Is it a big endian processor
 - Similar instruction layout to the MISP architecture: 6 bits opcode, 5 bits per register.
 - load and store instruction does not have same encoding of the offset.
 - load and store instruction have something weird going on in the low bits of the offset. All load and store instruction so far has been off-by-2 to 4-byte alignment
@@ -342,6 +341,7 @@ So far we have learned the following about the iRISC instructions set:
 - `opcode = 0x1b`: Store instruction.
 - `opcode = 0x1c`: Store instruction, but adds offset to base address register.
 - `opcode = 0x3f`: Used for return, and other things.
+
 
 References:
 ===========
