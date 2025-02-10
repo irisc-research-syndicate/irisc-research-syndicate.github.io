@@ -53,7 +53,7 @@ opcodes = table(
                 0x00a: lambda fs: "and r{rd}, r{rs}, r{rt}".format(**fs),
                 0x00e: lambda fs: "xor r{rd}, r{rs}, r{rt}".format(**fs),
                 0x081: lambda fs: "shr r{rd}, r{rs}, {shamt}".format(**fs),
-                0x083: lambda fs: "shr r{rd}, r{rs}, {shamt}".format(**fs),
+                0x083: lambda fs: "shl r{rd}, r{rs}, {shamt}".format(**fs),
                 0x219: lambda fs: "ld.d r{rd}, r{rs}, r{rt}".format(**fs),
             },
             field = "subop",
