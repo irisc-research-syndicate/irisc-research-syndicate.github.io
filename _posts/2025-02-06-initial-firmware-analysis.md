@@ -331,7 +331,7 @@ The firmware for ConnectX-5 is a viable target for reverse engineering but there
 So far we have learned the following about the iRISC instructions set:
 
 - Is it a big endian processor
-- Similar instruction layout to the MISP architecture: 6 bits opcode, 5 bits per register.
+- Similar instruction layout to the MIPS architecture: 6 bits opcode, 5 bits per register.
 - load and store instruction does not have same encoding of the offset.
 - load and store instruction have something weird going on in the low bits of the offset. All load and store instruction so far has been off-by-2 to 4-byte alignment
 - `r1` is the stack pointer
