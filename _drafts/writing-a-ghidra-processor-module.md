@@ -1,0 +1,272 @@
+---
+title: Writing a Ghidra processor module
+author: Jonas Rudloff
+layout: post
+---
+
+In this article we will create a Ghidra processor module for the iRISC processors, these processors are embedded in the ConnectX series of NICs from NVIDIA/Mellanox.
+
+A more complete version of a Ghidra processors module for iRISC is available [here](https://github.com/irisc-research-syndicate/ghidra-processor)[1]
+
+What we know about iRISC:
+=========================
+
+- Is it a big endian processor
+- Similar instruction layout to the MISP architecture: 6 bits opcode, 5 bits per register.
+- load and store instruction does not have same encoding of the offset.
+- load and store instruction have something weird going on in the low bits of the offset.
+- `r1` is the stack pointer
+- `r19` - `r20` are callee saved registers.
+- `r4-??`: function parameter registers.
+- `opcode = 0x00`: Add immediate instruction, `add rd, rs, imm16`.
+- `opcode = 0x19`: Load instruction.
+- `opcode = 0x1b`: Store instruction.
+- `opcode = 0x1c`: Store instruction, but adds offset to base address register.
+- `opcode = 0x3f`: Used for return, and other things.
+- The iRISC has 64 bit registers.
+- `opcode = 0x06,0x07,0x08,0x09`: sets 16bit words inside 64bit registers.
+- `opcode = 0x1e`: might be a 64 bit store operation.
+- `opcode = 0x25`: Is a jump/call instruction.
+- `opcode = 0x05`: Does some kind of comparison operation.
+- `opcode = 0x29`: is a conditional branch with 16bit offset.
+- `opcode = 0x3f, subop=0x000`: `add`-instruction.
+- `opcode = 0x3f, subop=0x008`: `or`-instruction.
+- `opcode = 0x3f, subop=0x00a`: `and`-instruction.
+- `opcode = 0x3f, subop=0x00e`: `xor`-instruction.
+- `opcode = 0x3f, subop=0x081`: `shr`-instruction.
+- `opcode = 0x3f, subop=0x083`: `shl`-instruction.
+
+We also know the following instruction layouts
+```
+R-type:  |  6bit opcode  |  5bit rs  |   5bit rd   |   5bit rt   | 11bit immidiate |
+I-type:  |  6bit opcode  |  5bit rs  |   5bit rd   |        16bit immidiate        |
+ST-type: |  6bit opcode  |  5bit rs  | 5bit hi-off |   5bit rt   |   11bit lo-off  |
+J-type:  |  6bit opcode  | 2bit jmpop |             24bit jump-offset              |
+SH-type  |  6bit opcode  |  5bit rs  |   5bit rd   |   5bit shamt |   11bit funct  |
+```
+
+Ghidra SLEIGH
+=============
+
+Ghidra supports for disassembling diffrent architecture is based on a DSL called SLEIGH, every architecture that ghidra supports has a corresponding processor module[2] which is primarily SLEIGH code and a bit of XML as glue.
+
+Documentation is available in the Ghidra repository, and we have made a copy available [here](/public/languages/)
+
+SLEIGH consists has three diffrent constructs 'defines', 'attachments`, 'tables'.
+- 'Defines': Defines certain things about the ISA such as: Endianness, Alignment, Registers, Tokens, and Token Fields, and how these relate to each other.
+- 'Attachments': Are used for attaching values(addspress space locations or numbers) to token fields.
+- 'Tables': Describes the decoding of diffrent instructions, their presentation in disassembly, and their semantics.
+
+We start out with some defines:
+
+```sleigh
+define endian=big
+
+define alignment=4;
+
+define space ram type=ram_space size=4 default;
+define space register type=register_space size=4;
+```
+
+This declears that the iRISC is a big endian machine with 4 bytes of alignment as well as two address spaces: one for registers and one for our main memory.
+
+Next we will go ahead and define our registers:
+```sleigh
+define register offset=0x00000 size=8 [
+    zero r1 r2 r3 r4 r5 r6 r7
+    r8 r9 r10 r11 r12 r13 r14 r15
+    r16 r17 r18 r19 r20 r21 r22 r23
+    r24 r25 r26 r27 r28 r29 r30 r31
+];
+
+define register offset=0x00000 size=4 [
+    zeroh zerol r1h r1l r2h r2l r3h r3l r4h r4l r5h r5l r6h r6l r7h r7l 
+    r8h r8l r9h r9l r10h r10l r11h r11l r12h r12l r13h r13l r14h r14l r15h r15l 
+    r16h r16l r17h r17l r18h r18l r19h r19l r20h r20l r21h r21l r22h r22l r23h r23l 
+    r24h r24l r25h r25l r26h r26l r27h r27l r28h r28l r29h r29l r30h r30l r31h r31l 
+];
+```
+This declears 32 64bit registers: `zero`, `r1`-`r31` that overlaps with 32 pairs of 32bit registers each of which consists of the high and low register. These are our general purpose registers.
+
+
+Next we can define our token(s) and their fields, in our case there will only be a single token as every instruction is excatly 4 bytes long:
+```sleigh
+define token instr(32)
+    op=(26, 31)
+    rs=(21, 25)
+    rshi=(21, 25)
+    rslo=(21, 25)
+    jmpop=(24, 25)
+    imm24=(0, 23)
+    simm24=(0, 23) signed
+    rd=(16, 20)
+    rdhi=(16, 20)
+    rdlo=(16, 20)
+    cmpop=(16, 20)
+    rt=(11, 15)
+    rthi=(11, 15)
+    rtlo=(11, 15)
+    shamt=(11, 15)
+    imm16=(0, 15)
+    imm11=(0, 10)
+    simm16=(0, 15) signed
+    funct=(0, 8)
+
+    off14=(2, 15) signed
+    off15=(1, 15) signed
+    off11=(0, 10) signed
+
+    storeoff_hi=(16, 20) signed
+    storeoff_lo = (0, 10)
+;
+```
+
+Then we can attach the registers to the token fields describing them:
+```sleigh
+attach variables [ rd rs rt ] [
+    zero r1 r2 r3 r4 r5 r6 r7
+    r8 r9 r10 r11 r12 r13 r14 r15
+    r16 r17 r18 r19 r20 r21 r22 r23
+    r24 r25 r26 r27 r28 r29 r30 r31
+];
+
+attach variables [ rdhi rshi rthi ] [
+    zeroh r1h r2h r3h r4h r5h r6h r7h
+    r8h r9h r10h r11h r12h r13h r14h r15h
+    r16h r17h r18h r19h r20h r21h r22h r23h
+    r24h r25h r26h r27h r28h r29h r30h r31h
+];
+
+attach variables [ rdlo rslo rtlo ] [
+    zerol r1l r2l r3l r4l r5l r6l r7l
+    r8l r9l r10l r11l r12l r13l r14l r15l
+    r16l r17l r18l r19l r20l r21l r22l r23l
+    r24l r25l r26l r27l r28l r29l r30l r31l
+];
+```
+This means that when we are talking about `rd`, `rs` or `rt` they no longer behave like regular numbers but instead whatever they are attached to. This means that if `rt=5` we are really talking about `r5`, so an operation like `rd = rs + rt` will read whatever `rs` and `rt` is pointing to, annd those numbers together and write the result to whatever `rd` is pointing to. In constrast the expression, `rd = rs + simm16` will only read what `rs` is pointing to, but `simm16` will just be the bits from the instruction.
+
+
+Next we finaly we can begin making our tables. We star/t by makeing a few subtables, for fixing the `zero` register.
+```sleigh
+RD: rd is rd { export rd; }
+
+RSsrc: rs is rs { export rs; }
+RSsrc: rs is rs & rs=0 { export 0:8; }
+
+RTsrc: rt is rt { export rt; }
+RTsrc: rt is rt & rt=0 { export 0:8; }
+```
+This will make it so that if `rs` or `rt` is the constant `0`, we will not read the `zero` register but instead be the constant `0`.
+However this does not override the meaning of `rs` and `rt` but introduces 2 subtables `RSsrc` and `RTsrc` which does what we want.
+
+The way tables in general works is the following:
+
+```
+<table name> : <disassembly display> is <list of constraints> [ <disassembly expressions> ] { <semantics> }
+```
+- Table name: This is the name of the Table, and for the root('instruction') table this is left empty.
+- Disassembly display: this is what is displayed in the disassembly view.
+- Constraints: Speficies the matching of token fields.
+- Disassembly expressions: Simple calculation, resulting in disassembly variables, which can both be used in the disassembly display or in the semantics. This can be used for coaleasing offsets that are spread over multiple token fields, as is the instance for the offset in our store instruction.
+- Semantics: Describes what the talbe is supposed to.
+
+Next we will make our first instruction, and it will be a catch-all instruction without any constraints:
+```sleigh
+define pcodeop UnkOp;
+
+:unk.^op RD, RSsrc, RTsrc, imm16 is op & RD & RSsrc & RTsrc & imm16 {
+    RD = UnkOp(op:1, RSsrc, RTsrc);
+}
+```
+This will make is no that any instruction that ghidra otherwise can't decode will be decoded as instruction that looks like: `unk.0x42 r1, r2, r3, 0x1337`
+
+A few things to notice here:
+
+- `^`: simply a means to concatanate the two expressions without a space between them.
+- `UnkOp`: A custom PCODE operation that ghidra will treat as opaque and only use for dataflow analysis.
+- `op:1`: cast `op`, which is a 6bit token field to a 1 byte number. Ghidra primarily deals in byte-sized numebers.
+- No constraints: Even as we don't have any constraints on the instruction we still need to list which token field we want to use.
+- Sub-tables: We are using the `RSsrc`, `RTsrc`, `RD` tables we made before, and not `rd`, `rs`, and `rt` directly.
+- Tables are matched by matching the most specific constructor, this means that constructors must either be fully contained in the a diffrent constructor's constraints or be fully seperate from it. this is detailed [here](/public/languages/html/sleigh_constructors.html#sleigh_tables)
+
+
+Next we will make a few other opcodes:
+```sleigh
+:add RD, RSsrc, simm16         is op=0x00 & RD & RSsrc & simm16 {
+    RD = RSsrc + simm16;
+}
+
+:set0 RD, RSsrc, imm16         is op=0x06 & RD & RSsrc & imm16 {
+    RD = (RSsrc & 0x0000ffffffffffff) | (imm16 << 48);
+}
+
+:set1 RD, RSsrc, imm16         is op=0x07 & RD & RSsrc & imm16 {
+    RD = (RSsrc & 0xffff0000ffffffff) | (imm16 << 32);
+}
+
+:set3 RD, RSsrc, imm16         is op=0x08 & RD & RSsrc & imm16 {
+    RD = (RSsrc & 0xffffffffffff0000) | (imm16 << 0);
+}
+
+:set2 RD, RSsrc, imm16         is op=0x09 & RD & RSsrc & imm16 {
+    RD = (RSsrc & 0xffffffff0000ffff) | (imm16 << 16);
+}
+```
+
+Some things of note here:
+- `op=0x00`: We are now using constraints to match instruction based on opcodes
+- `simm16`: we are using a sign-extended version of the low 16bits.
+- Semantics: Can be complex expressions with a lot of operations.
+- `set3` and `set2`: is in the 'wrong' order: This is just how the iRISC works.
+
+So far we have only dealt with instructions of the form:
+`foo <reg>, <reg>, <constant>`
+next we will deal with some of the reg-reg-reg type instructions:
+```sleigh
+define pcodeop UnkAlu;
+
+:alu.^funct RD, RSsrc, RTsrc    is op=0x3f & funct & RD & RSsrc & RTsrc {
+    RD = UnkAlu(funct:2, RSsrc:8, RTsrc:8);
+}
+
+:add RD, RSsrc, RTsrc           is op=0x3f & funct=0x000 & RD & RSsrc & RTsrc {
+    RD = RSsrc + RTsrc;
+}
+
+:cmp RD, RSsrc, RTsrc           is op=0x3f & funct=0x005 & RD & RSsrc & RTsrc {
+    # ???
+}
+
+:or  RD, RSsrc, RTsrc           is op=0x3f & funct=0x008 & RD & RSsrc & RTsrc {
+    RD = RSsrc | RTsrc;
+}
+:mv  RD, RTsrc                  is op=0x3f & funct=0x008 & RD & RTsrc & rt=rs {
+    RD = RTsrc;
+}
+:and RD, RSsrc, RTsrc           is op=0x3f & funct=0x00a & RD & RSsrc & RTsrc {
+    RD = RSsrc & RTsrc;
+}
+:xor RD, RSsrc, RTsrc           is op=0x3f & funct=0x00e & RD & RSsrc & RTsrc {
+    RD = RSsrc ^ RTsrc;
+}
+
+:shl RDlo, RSlosrc, shamt       is op=0x3f & funct=0x081 & RDlo & RSlosrc & shamt {
+    RD = RSsrc << shamt:1;
+}
+:shr RDlo, RSlosrc, shamt       is op=0x3f & funct=0x083 & RDlo & RSlosrc & shamt {
+    RDlo = RSlosrc >> shamt:1;
+}
+```
+
+Things to note here:
+- Another catch-all instruction `alu.^funct`
+- `mv`: is really just an `or` instruction where `rt=rs`, this gives more nice disassembly.
+- `cmp`: instruction is missing semantics because we don't yet understand what is does.
+- `RDlo`, `RSlosrc`: similar tables to `RD` and `RSsrc` but only working on the low part of the registers.
+
+References
+==========
+[1] https://github.com/irisc-research-syndicate/ghidra-processor
+
+[2] https://github.com/NationalSecurityAgency/ghidra/tree/master/Ghidra/Processors
