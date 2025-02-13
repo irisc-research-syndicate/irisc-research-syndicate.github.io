@@ -12,7 +12,7 @@ What we know about iRISC:
 =========================
 
 - Is it a big endian processor
-- Similar instruction layout to the MISP architecture: 6 bits opcode, 5 bits per register.
+- Similar instruction layout to the MIPS architecture: 6 bits opcode, 5 bits per register.
 - load and store instruction does not have same encoding of the offset.
 - load and store instruction have something weird going on in the low bits of the offset.
 - `r1` is the stack pointer
