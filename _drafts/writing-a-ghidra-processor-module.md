@@ -76,7 +76,7 @@ define space ram type=ram_space size=4 default;
 define space register type=register_space size=4;
 ```
 
-This declears that the iRISC is a big endian machine with 4 bytes of alignment as well as two address spaces: one for registers and one for our main memory.
+This declares that the iRISC is a big endian machine with 4 bytes of alignment as well as two address spaces: one for registers and one for our main memory.
 
 Next we will go ahead and define our registers:
 ```sleigh
@@ -94,7 +94,7 @@ define register offset=0x00000 size=4 [
     r24h r24l r25h r25l r26h r26l r27h r27l r28h r28l r29h r29l r30h r30l r31h r31l 
 ];
 ```
-This declears 32 64bit registers: `zero`, `r1`-`r31` that overlaps with 32 pairs of 32bit registers each of which consists of the high and low register. These are our general purpose registers.
+This declares 32 64bit registers: `zero`, `r1`-`r31` that overlaps with 32 pairs of 32bit registers each of which consists of the high and low register. These are our general purpose registers.
 
 
 Next we can define our token(s) and their fields, in our case there will only be a single token as every instruction is excatly 4 bytes long:
