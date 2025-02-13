@@ -152,10 +152,10 @@ attach variables [ rdlo rslo rtlo ] [
     r24l r25l r26l r27l r28l r29l r30l r31l
 ];
 ```
-This means that when we are talking about `rd`, `rs` or `rt` they no longer behave like regular numbers but instead whatever they are attached to. This means that if `rt=5` we are really talking about `r5`, so an operation like `rd = rs + rt` will read whatever `rs` and `rt` is pointing to, annd those numbers together and write the result to whatever `rd` is pointing to. In constrast the expression, `rd = rs + simm16` will only read what `rs` is pointing to, but `simm16` will just be the bits from the instruction.
+This means that when we are talking about `rd`, `rs` or `rt` they no longer behave like regular numbers but instead whatever they are attached to. This means that if `rt=5` we are really talking about `r5`, so an operation like `rd = rs + rt` will read whatever `rs` and `rt` is pointing to, and add those numbers together and write the result to whatever `rd` is pointing to. In constrast the expression, `rd = rs + simm16` will only read what `rs` is pointing to, but `simm16` will just be the bits from the instruction.
 
 
-Next we finaly we can begin making our tables. We star/t by makeing a few subtables, for fixing the `zero` register.
+Finaly we can begin making our tables. We start by makeing a few subtables, for fixing the `zero` register.
 ```sleigh
 RD: rd is rd { export rd; }
 
