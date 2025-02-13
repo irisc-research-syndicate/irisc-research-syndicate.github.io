@@ -1,0 +1,165 @@
+define endian=big;
+
+define alignment=4;
+
+define space ram type=ram_space size=4 default;
+define space register type=register_space size=4;
+
+# --- Define registers
+
+define register offset=0x00000 size=8 [
+    zero r1 r2 r3 r4 r5 r6 r7
+    r8 r9 r10 r11 r12 r13 r14 r15
+    r16 r17 r18 r19 r20 r21 r22 r23
+    r24 r25 r26 r27 r28 r29 r30 r31
+];
+
+define register offset=0x00000 size=4 [
+    zeroh zerol r1h r1l r2h r2l r3h r3l r4h r4l r5h r5l r6h r6l r7h r7l 
+    r8h r8l r9h r9l r10h r10l r11h r11l r12h r12l r13h r13l r14h r14l r15h r15l 
+    r16h r16l r17h r17l r18h r18l r19h r19l r20h r20l r21h r21l r22h r22l r23h r23l 
+    r24h r24l r25h r25l r26h r26l r27h r27l r28h r28l r29h r29l r30h r30l r31h r31l 
+];
+
+# --- Define the token 'instr'
+
+define token instr(32)
+    op=(26, 31)
+    rs=(21, 25)
+    rshi=(21, 25)
+    rslo=(21, 25)
+    jmpop=(24, 25)
+    imm24=(0, 23)
+    simm24=(0, 23) signed
+    rd=(16, 20)
+    rdhi=(16, 20)
+    rdlo=(16, 20)
+    cmpop=(16, 20)
+    rt=(11, 15)
+    rthi=(11, 15)
+    rtlo=(11, 15)
+    shamt=(11, 15)
+    imm16=(0, 15)
+    imm11=(0, 10)
+    simm16=(0, 15) signed
+    funct=(0, 8)
+
+    off14=(2, 15) signed
+    off15=(1, 15) signed
+    off11=(0, 10) signed
+
+    storeoff_hi=(16, 20) signed
+    storeoff_lo = (0, 10)
+;
+
+# --- Attach variables to token fields
+
+attach variables [ rd rs rt ] [
+    zero r1 r2 r3 r4 r5 r6 r7
+    r8 r9 r10 r11 r12 r13 r14 r15
+    r16 r17 r18 r19 r20 r21 r22 r23
+    r24 r25 r26 r27 r28 r29 r30 r31
+];
+
+attach variables [ rdhi rshi rthi ] [
+    zeroh r1h r2h r3h r4h r5h r6h r7h
+    r8h r9h r10h r11h r12h r13h r14h r15h
+    r16h r17h r18h r19h r20h r21h r22h r23h
+    r24h r25h r26h r27h r28h r29h r30h r31h
+];
+
+attach variables [ rdlo rslo rtlo ] [
+    zerol r1l r2l r3l r4l r5l r6l r7l
+    r8l r9l r10l r11l r12l r13l r14l r15l
+    r16l r17l r18l r19l r20l r21l r22l r23l
+    r24l r25l r26l r27l r28l r29l r30l r31l
+];
+
+# --- Fix zero register sub tables
+
+RD: rd is rd { export rd; }
+
+RSsrc: rs is rs { export rs; }
+RSsrc: rs is rs & rs=0 { export 0:8; }
+
+RTsrc: rt is rt { export rt; }
+RTsrc: rt is rt & rt=0 { export 0:8; }
+
+# --- skip these sub tables
+
+RDlo: rdlo is rdlo { export rdlo; }
+
+RSlosrc: rslo is rslo { export rslo; }
+RSlosrc: rslo is rslo & rslo=0 { export 0:4; }
+
+# --- Catch-all unknown instruction
+
+define pcodeop UnkOp;
+
+:unk.^op RD, RSsrc, RTsrc, imm16 is op & RD & RSsrc & RTsrc & imm16 {
+    RD = UnkOp(op:1, RSsrc, RTsrc);
+}
+
+# --- First screenshot
+
+# --- more instructions 'REG REG IMM'-type
+
+:add RD, RSsrc, simm16         is op=0x00 & RD & RSsrc & simm16 {
+    RD = RSsrc + simm16;
+}
+
+:set0 RD, RSsrc, imm16         is op=0x06 & RD & RSsrc & imm16 {
+    RD = (RSsrc & 0x0000ffffffffffff) | (imm16 << 48);
+}
+
+:set1 RD, RSsrc, imm16         is op=0x07 & RD & RSsrc & imm16 {
+    RD = (RSsrc & 0xffff0000ffffffff) | (imm16 << 32);
+}
+
+:set3 RD, RSsrc, imm16         is op=0x08 & RD & RSsrc & imm16 {
+    RD = (RSsrc & 0xffffffffffff0000) | (imm16 << 0);
+}
+
+:set2 RD, RSsrc, imm16         is op=0x09 & RD & RSsrc & imm16 {
+    RD = (RSsrc & 0xffffffff0000ffff) | (imm16 << 16);
+}
+
+# --- More instructions 'REG REG REG'-type
+
+define pcodeop UnkAlu;
+
+:alu.^funct RD, RSsrc, RTsrc    is op=0x3f & funct & RD & RSsrc & RTsrc {
+    RD = UnkAlu(funct:2, RSsrc:8, RTsrc:8);
+}
+
+:add RD, RSsrc, RTsrc           is op=0x3f & funct=0x000 & RD & RSsrc & RTsrc {
+    RD = RSsrc + RTsrc;
+}
+
+:cmp RD, RSsrc, RTsrc           is op=0x3f & funct=0x005 & RD & RSsrc & RTsrc {
+    # ???
+}
+
+:or  RD, RSsrc, RTsrc           is op=0x3f & funct=0x008 & RD & RSsrc & RTsrc {
+    RD = RSsrc | RTsrc;
+}
+
+:mv  RD, RTsrc                  is op=0x3f & funct=0x008 & RD & RTsrc & rt=rs {
+    RD = RTsrc;
+}
+
+:and RD, RSsrc, RTsrc           is op=0x3f & funct=0x00a & RD & RSsrc & RTsrc {
+    RD = RSsrc & RTsrc;
+}
+
+:xor RD, RSsrc, RTsrc           is op=0x3f & funct=0x00e & RD & RSsrc & RTsrc {
+    RD = RSsrc ^ RTsrc;
+}
+
+:shl RDlo, RSlosrc, shamt       is op=0x3f & funct=0x081 & RDlo & RSlosrc & shamt {
+    RDlo = RSlosrc << shamt:1;
+}
+
+:shr RDlo, RSlosrc, shamt       is op=0x3f & funct=0x083 & RDlo & RSlosrc & shamt {
+    RDlo = RSlosrc >> shamt:1;
+}

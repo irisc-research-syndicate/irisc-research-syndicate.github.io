@@ -52,15 +52,23 @@ Ghidra supports for disassembling diffrent architecture is based on a DSL called
 
 Documentation is available in the Ghidra repository, and we have made a copy available [here](/public/languages/)
 
+The XML files contains basic information about the architecture:
+- The name, description, and ID
+- Information about different variants of instructions set, such as extensions, endianness,
+- Compiler specific information like common stack pointers, frame pointers, and other parts of the calling convention, and alignment hints for structure layout.
+
+
 SLEIGH consists has three diffrent constructs 'defines', 'attachments`, 'tables'.
 - 'Defines': Defines certain things about the ISA such as: Endianness, Alignment, Registers, Tokens, and Token Fields, and how these relate to each other.
 - 'Attachments': Are used for attaching values(addspress space locations or numbers) to token fields.
 - 'Tables': Describes the decoding of diffrent instructions, their presentation in disassembly, and their semantics.
 
-We start out with some defines:
+Our Processors Module
+---------------------
+We will ignore the XML files, they are important but not really that interesting. They are available [here](https://github.com/irisc-research-syndicate/ghidra-processor/tree/master/data/languages)
 
 ```sleigh
-define endian=big
+define endian=big;
 
 define alignment=4;
 
@@ -191,6 +199,25 @@ A few things to notice here:
 - Tables are matched by matching the most specific constructor, this means that constructors must either be fully contained in the a diffrent constructor's constraints or be fully seperate from it. this is detailed [here](/public/languages/html/sleigh_constructors.html#sleigh_tables)
 
 
+Trying our processor module
+---------------------------
+
+1. Symlink the processor module into ghidra: `ln -s /path/to/custom/module /path/to/ghidra/Ghidra/Processor/iRISC`
+2. Create a new project, and import `IRON_PREP_CODE`
+3. Choose the iRISC language
+4. Open the Ghidra CodeBrowser, and do not auto analyse.
+5. press `d` and the top of the disassembly view.
+
+We now have the following:
+
+![Our first disassembly in Ghidra](/public/ghidra-processor/img/disasm1.png)
+
+This is basically where we started when we began writing our python disassembler.
+However as we have more knowlegde we can just simply implement our knowlegde in the SLEIGH lamguage
+
+Improving our SLEIGH module: AlU instructions
+---------------------------------------------
+
 Next we will make a few other opcodes:
 ```sleigh
 :add RD, RSsrc, simm16         is op=0x00 & RD & RSsrc & simm16 {
@@ -218,7 +245,7 @@ Some things of note here:
 - `op=0x00`: We are now using constraints to match instruction based on opcodes
 - `simm16`: we are using a sign-extended version of the low 16bits.
 - Semantics: Can be complex expressions with a lot of operations.
-- `set3` and `set2`: is in the 'wrong' order: This is just how the iRISC works.
+- `set3` and `set2`: is in the 'wrong' order: This is just how the iRISC works, nothing we can do about that.
 
 So far we have only dealt with instructions of the form:
 `foo <reg>, <reg>, <constant>`
@@ -264,6 +291,24 @@ Things to note here:
 - `mv`: is really just an `or` instruction where `rt=rs`, this gives more nice disassembly.
 - `cmp`: instruction is missing semantics because we don't yet understand what is does.
 - `RDlo`, `RSlosrc`: similar tables to `RD` and `RSsrc` but only working on the low part of the registers.
+
+At this point in time our disassembly for the `SHA256_init` looks like this
+
+![SHA256_init](/public/ghidra-processor/img/disasm2_sha256_init.png)
+
+We will have a much to do...
+
+More improvements: Memory operations
+------------------------------------
+TODO
+
+More improvements: Function entry and return
+--------------------------------------------
+TODO
+
+Function calls and branches
+---------------------------
+TODO
 
 References
 ==========
