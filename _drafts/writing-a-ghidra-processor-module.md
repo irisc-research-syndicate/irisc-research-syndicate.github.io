@@ -429,15 +429,175 @@ There are many things wrong with this decompilation:
 - Still unknown opcodes everywhere.
 
 However there are many correct things about the decompilation as well:
-- All of the computation are correct.
-- Our load and stores are take pjuts the SHA256 state into register seems to work as expected.
-- The code does not contain all of the register spilling to stack.
+- All of the ALU-computations are correct.
+- Our loads and stores are that moves the SHA256 state from and to registers seems to work as expected.
+- The code does not contain all of the register spilling to stack, the decompiler is able to recognize the spilling pattern.
 
 
 More instructions: Function calls and branches
 ----------------------------------------------
-TODO
+This final thing that we will have a look at in this blog post is control flow.
 
+For that we need to have a look at the following opcodes:
+- `opcode = 0x25`: Is a jump/call instruction.
+- `opcode = 0x05`: Does some kind of comparison operation.
+- `opcode = 0x2f, subop=0x005`: REG-REG comparison.
+- `opcode = 0x28, 0x29`: Is a conditional branch with 16bit offset.
+
+We begin by fixing the `call` instruction:
+```sleigh
+REL24: reloc                    is simm24 [ reloc=inst_start + (4*simm24); ] {
+    export *:4 reloc;
+}
+
+:call REL24                     is op=0x25 & jmpop=0x0 & REL24 {
+    # retaddr = inst_next;
+    call REL24;
+}
+```
+Not much of note here, but these two things:
+- `inst_start`: this is the address of the beginning of the current instruction.
+- `call`: Again, mostly same semantics as `goto` and `return`, but useful for decompiler hints.
+
+Compares and Branches a a bit more complicated:
+```sleigh
+define pcodeop UnkCmpOp;
+
+define register offset=0x104 size=1 [
+    compare
+];
+
+:cmp RD RSsrc, simm16           is op=0x05 & RD & RSsrc & simm16 {
+    compare = UnkCmpOp(RSsrc, simm16:8);
+}
+
+:cmp RD, RSsrc, RTsrc           is op=0x3f & funct=0x005 & RD & RSsrc & RTsrc {
+    compare = UnkCmpOp(RSsrc, RTsrc);
+}
+
+REL16: reloc is simm16 [ reloc=inst_start + (4*simm16); ] {
+    export *:4 reloc;
+}
+
+define pcodeop UnkBrOp;
+
+:bt.^brop1^"."^brop2 REL16       is op=0x28 & brop1 & brop2 & REL16 {
+    local cond:4 = UnkBrOp(brop1:1, brop2:1, compare);
+    if(cond == 1) goto REL16;
+}
+
+:bf.^brop1^"."^brop2 REL16       is op=0x29 & brop1 & brop2 & REL16 {
+    local cond:4 = UnkBrOp(brop1:1, brop2:1, compare);
+    if(cond == 0) goto REL16;
+}
+```
+- We have again made another register, this time for describing the dataflow between `cmp` and `bt` or `bf`
+- We have two more pcode operations are are unknown: `UnkCmpOp` and `UnkbrOp`.
+- We are using local variables `local cond = ...`, these behave as one would expect.
+- We are using conditional execution: `if (...) goto REL16;`
+
+After all these operations are in place we are left with the following decompilation of `sha256_transform`:
+```c
+void sha256_transform(uint *param_1)
+
+{
+  int iVar1;
+  ulonglong uVar2;
+  ulonglong uVar3;
+  ulonglong uVar4;
+  uint uVar5;
+  undefined4 in_r4h;
+  longlong lVar6;
+  uint uVar7;
+  uint uVar8;
+  ulonglong uVar9;
+  ulonglong uVar10;
+  ulonglong uVar11;
+  longlong lVar12;
+  longlong lVar13;
+  ulonglong uVar14;
+  ulonglong uVar15;
+  ulonglong uVar16;
+  ulonglong uVar17;
+  ulonglong uVar18;
+  ulonglong uVar19;
+  undefined8 uVar20;
+  undefined uVar21;
+  
+  lVar6 = 0;
+  uVar5 = *param_1;
+  do {
+    iVar1 = (int)lVar6;
+    uVar7 = *(uint *)((int)param_1 + iVar1 + 4);
+    uVar8 = *(uint *)((int)param_1 + iVar1 + 0x38);
+    *(uint *)((int)param_1 + iVar1 + 0x40) =
+         uVar5 + *(int *)((int)param_1 + iVar1 + 0x24) +
+         ((uVar8 >> 0x13 | uVar8 << 0xd) ^ uVar8 >> 10 ^ (uVar8 >> 0x11 | uVar8 << 0xf)) +
+         ((uVar7 >> 0x12 | uVar7 << 0xe) ^ uVar7 >> 3 ^ (uVar7 >> 7 | uVar7 << 0x19));
+    lVar6 = lVar6 + 4;
+    uVar21 = UnkCmpOp(lVar6,0xc0);
+    iVar1 = UnkBrOp(0,0,uVar21);
+    uVar5 = uVar7;
+  } while (iVar1 == 0);
+  lVar6 = 0;
+  uVar20 = UnkOp(2,0x5510,0);
+  uVar2 = (ulonglong)param_1[0x45];
+  uVar3 = (ulonglong)param_1[0x49];
+  uVar9 = (ulonglong)param_1[0x4a];
+  uVar11 = (ulonglong)param_1[0x48];
+  uVar15 = (ulonglong)param_1[0x44];
+  uVar17 = (ulonglong)param_1[0x4b];
+  uVar18 = (ulonglong)param_1[0x47];
+  uVar4 = (ulonglong)param_1[0x46];
+  do {
+    uVar19 = uVar4;
+    uVar10 = uVar9;
+    uVar9 = uVar3;
+    uVar4 = uVar2;
+    uVar7 = (uint)uVar11;
+    uVar5 = (uint)uVar15;
+    lVar12 = UnkAlu(0x19,lVar6,uVar20);
+    lVar13 = UnkAlu(0x19,CONCAT44(in_r4h,param_1),lVar6);
+    lVar13 = ((uVar7 >> 6 | uVar7 << 0x1a) ^ (uVar7 >> 0xb | uVar7 << 0x15) ^
+             (uVar7 >> 0x19 | uVar7 << 7)) + uVar17 +
+             (uVar10 & (uVar11 ^ 0xffffffffffffffff) ^ uVar9 & uVar11) + lVar12 + lVar13;
+    uVar16 = (ulonglong)
+             ((uVar5 >> 2 | uVar5 << 0x1e) ^ (uVar5 >> 0xd | uVar5 << 0x13) ^
+             (uVar5 >> 0x16 | uVar5 << 10)) + (uVar15 & (uVar4 ^ uVar19) ^ uVar4 & uVar19) + lVar13;
+    uVar14 = lVar13 + uVar18;
+    lVar6 = lVar6 + 4;
+    uVar21 = UnkCmpOp(lVar6,0x100);
+    iVar1 = UnkBrOp(0,0,uVar21);
+    uVar2 = uVar15;
+    uVar3 = uVar11;
+    uVar11 = uVar14;
+    uVar15 = uVar16;
+    uVar17 = uVar10;
+    uVar18 = uVar19;
+  } while (iVar1 == 0);
+  param_1[0x45] = uVar5 + param_1[0x45];
+  param_1[0x44] = (int)uVar16 + param_1[0x44];
+  param_1[0x46] = (int)uVar4 + param_1[0x46];
+  param_1[0x47] = (int)uVar19 + param_1[0x47];
+  param_1[0x48] = (int)uVar14 + param_1[0x48];
+  param_1[0x49] = uVar7 + param_1[0x49];
+  param_1[0x4a] = (int)uVar9 + param_1[0x4a];
+  param_1[0x4b] = (int)uVar10 + param_1[0x4b];
+  return;
+}
+```
+Notice now that there are `while`-loops in the disassembly.
+
+Figuring out the correct semantics for `UnkCmpOp` and `UnkBrOp` is left as an exercise to the reader.
+
+Conclusion
+----------
+
+We, the iRISC research syndicate, already know some of the compare and branch semantics. The Ghidra processor module made in this blog post is a simplified toy example. For a more complete version, based on our most current knowledge, see our [Ghidra processor module on Github](https://github.com/irisc-research-syndicate/ghidra-processor).
+
+All the SLEIGH code(and the important XML files that we skiped) that we have created for this blog post are available [here](https://github.com/irisc-research-syndicate/irisc-research-syndicate.github.io/tree/master/public/ghidra-processor/data/languages)
+
+Happy hacking, and stay tuned for our next blog post where we will be patching the firmware and gain code execution of the ConnectX-5 NICs.
 
 References
 ==========

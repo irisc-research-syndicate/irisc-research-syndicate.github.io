@@ -28,6 +28,7 @@ define token instr(32)
     rs=(21, 25)
     rshi=(21, 25)
     rslo=(21, 25)
+    brop1=(21, 25)
     jmpop=(24, 25)
     imm24=(0, 23)
     simm24=(0, 23) signed
@@ -35,6 +36,7 @@ define token instr(32)
     rdhi=(16, 20)
     rdlo=(16, 20)
     cmpop=(16, 20)
+    brop2=(16, 20)
     rt=(11, 15)
     rthi=(11, 15)
     rtlo=(11, 15)
@@ -107,11 +109,11 @@ define pcodeop UnkOp;
 
 # --- more instructions 'REG REG IMM'-type
 
-:add RD, RSsrc, simm16         is op=0x00 & RD & RSsrc & simm16 {
+:add RD, RSsrc, simm16          is op=0x00 & RD & RSsrc & simm16 {
     RD = RSsrc + simm16;
 }
 
-:set0 RD, RSsrc, imm16         is op=0x06 & RD & RSsrc & imm16 {
+:set0 RD, RSsrc, imm16          is op=0x06 & RD & RSsrc & imm16 {
     RD = (RSsrc & 0x0000ffffffffffff) | (imm16 << 48);
 }
 
@@ -137,10 +139,6 @@ define pcodeop UnkAlu;
 
 :add RD, RSsrc, RTsrc           is op=0x3f & funct=0x000 & RD & RSsrc & RTsrc {
     RD = RSsrc + RTsrc;
-}
-
-:cmp RD, RSsrc, RTsrc           is op=0x3f & funct=0x005 & RD & RSsrc & RTsrc {
-    # ???
 }
 
 :or  RD, RSsrc, RTsrc           is op=0x3f & funct=0x008 & RD & RSsrc & RTsrc {
@@ -195,6 +193,7 @@ STOFF14: offset                 is stoff_hi & stoff14_lo [ offset = (stoff_hi <<
 }
 
 # --- Function call and return
+
 define register offset=0x100 size=4 [
     retaddr
 ];
@@ -212,3 +211,44 @@ define register offset=0x100 size=4 [
 }
 
 # --- Conflow flow
+
+REL24: reloc                    is simm24 [ reloc=inst_start + (4*simm24); ] {
+    export *:4 reloc;
+}
+
+:call REL24                     is op=0x25 & jmpop=0x0 & REL24 {
+    # retaddr = inst_next;
+    call REL24;
+}
+
+# --- Control flow: branches
+
+define pcodeop UnkCmpOp;
+
+define register offset=0x104 size=1 [
+    compare
+];
+
+:cmp RD RSsrc, simm16           is op=0x05 & RD & RSsrc & simm16 {
+    compare = UnkCmpOp(RSsrc, simm16:8);
+}
+
+:cmp RD, RSsrc, RTsrc           is op=0x3f & funct=0x005 & RD & RSsrc & RTsrc {
+    compare = UnkCmpOp(RSsrc, RTsrc);
+}
+
+REL16: reloc is simm16 [ reloc=inst_start + (4*simm16); ] {
+    export *:4 reloc;
+}
+
+define pcodeop UnkBrOp;
+
+:bt.^brop1^"."^brop2 REL16       is op=0x28 & brop1 & brop2 & REL16 {
+    local cond:4 = UnkBrOp(brop1:1, brop2:1, compare);
+    if(cond == 1) goto REL16;
+}
+
+:bf.^brop1^"."^brop2 REL16       is op=0x29 & brop1 & brop2 & REL16 {
+    local cond:4 = UnkBrOp(brop1:1, brop2:1, compare);
+    if(cond == 0) goto REL16;
+}
