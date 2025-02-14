@@ -104,6 +104,7 @@ define token instr(32)
     rs=(21, 25)
     rshi=(21, 25)
     rslo=(21, 25)
+    brop1=(21, 25)
     jmpop=(24, 25)
     imm24=(0, 23)
     simm24=(0, 23) signed
@@ -111,6 +112,7 @@ define token instr(32)
     rdhi=(16, 20)
     rdlo=(16, 20)
     cmpop=(16, 20)
+    brop2=(16, 20)
     rt=(11, 15)
     rthi=(11, 15)
     rtlo=(11, 15)
@@ -124,8 +126,8 @@ define token instr(32)
     off15=(1, 15) signed
     off11=(0, 10) signed
 
-    storeoff_hi=(16, 20) signed
-    storeoff_lo=(0, 10)
+    stoff_hi=(16, 20) signed
+    stoff14_lo=(2, 10)
 ;
 ```
 In this definition we define a token called `instr` which is 32bits long, this token consists of multiple possible overlapping fields.
@@ -220,11 +222,11 @@ Improving our SLEIGH module: ALU instructions
 ---------------------------------------------
 Next we will make a few other opcodes:
 ```sleigh
-:add RD, RSsrc, simm16         is op=0x00 & RD & RSsrc & simm16 {
+:add RD, RSsrc, simm16          is op=0x00 & RD & RSsrc & simm16 {
     RD = RSsrc + simm16;
 }
 
-:set0 RD, RSsrc, imm16         is op=0x06 & RD & RSsrc & imm16 {
+:set0 RD, RSsrc, imm16          is op=0x06 & RD & RSsrc & imm16 {
     RD = (RSsrc & 0x0000ffffffffffff) | (imm16 << 48);
 }
 
@@ -261,26 +263,26 @@ define pcodeop UnkAlu;
     RD = RSsrc + RTsrc;
 }
 
-:cmp RD, RSsrc, RTsrc           is op=0x3f & funct=0x005 & RD & RSsrc & RTsrc {
-    # ???
-}
-
 :or  RD, RSsrc, RTsrc           is op=0x3f & funct=0x008 & RD & RSsrc & RTsrc {
     RD = RSsrc | RTsrc;
 }
+
 :mv  RD, RTsrc                  is op=0x3f & funct=0x008 & RD & RTsrc & rt=rs {
     RD = RTsrc;
 }
+
 :and RD, RSsrc, RTsrc           is op=0x3f & funct=0x00a & RD & RSsrc & RTsrc {
     RD = RSsrc & RTsrc;
 }
+
 :xor RD, RSsrc, RTsrc           is op=0x3f & funct=0x00e & RD & RSsrc & RTsrc {
     RD = RSsrc ^ RTsrc;
 }
 
 :shl RDlo, RSlosrc, shamt       is op=0x3f & funct=0x081 & RDlo & RSlosrc & shamt {
-    RD = RSsrc << shamt:1;
+    RDlo = RSlosrc << shamt:1;
 }
+
 :shr RDlo, RSlosrc, shamt       is op=0x3f & funct=0x083 & RDlo & RSlosrc & shamt {
     RDlo = RSlosrc >> shamt:1;
 }
@@ -289,7 +291,6 @@ define pcodeop UnkAlu;
 Things to note here:
 - Another catch-all instruction `alu.^funct`
 - `mv`: is really just an `or` instruction where `rt=rs`, this gives more nice disassembly.
-- `cmp`: instruction is missing semantics because we don't yet understand what is does.
 - `RDlo`, `RSlosrc`: similar tables to `RD` and `RSsrc` but only working on the low part of the registers.
 
 At this point in time our disassembly for the `SHA256_init` looks like this
@@ -441,7 +442,7 @@ This final thing that we will have a look at in this blog post is control flow.
 
 For that we need to have a look at the following opcodes:
 - `opcode = 0x25`: Is a jump/call instruction.
-- `opcode = 0x05`: Does some kind of comparison operation.
+- `opcode = 0x05`: REG-IMM comparison.
 - `opcode = 0x2f, subop=0x005`: REG-REG comparison.
 - `opcode = 0x28, 0x29`: Is a conditional branch with 16bit offset.
 

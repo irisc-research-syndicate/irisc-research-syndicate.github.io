@@ -183,11 +183,11 @@ STOFF14: offset                 is stoff_hi & stoff14_lo [ offset = (stoff_hi <<
     export *[const]:4 offset;
 }
 
-:st.d RTlosrc, RSlosrc, STOFF14  is op=0x1b & RTlosrc & RSlosrc & STOFF14 {
+:st.d RTlosrc, RSlosrc, STOFF14     is op=0x1b & RTlosrc & RSlosrc & STOFF14 {
     *[ram]:4 (RSlosrc + STOFF14) = RTlosrc;
 }
 
-:st.d! RTlosrc, RSlosrc, STOFF14 is op=0x1c & RTlosrc & RSlosrc & STOFF14 {
+:st.d! RTlosrc, RSlosrc, STOFF14    is op=0x1c & RTlosrc & RSlosrc & STOFF14 {
     *[ram]:4 (RSlosrc + STOFF14) = RTlosrc;
     RSlosrc = RSlosrc + STOFF14;
 }
