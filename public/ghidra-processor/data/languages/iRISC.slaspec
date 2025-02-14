@@ -48,8 +48,8 @@ define token instr(32)
     off15=(1, 15) signed
     off11=(0, 10) signed
 
-    storeoff_hi=(16, 20) signed
-    storeoff_lo = (0, 10)
+    stoff_hi=(16, 20) signed
+    stoff14_lo = (2, 10)
 ;
 
 # --- Attach variables to token fields
@@ -91,6 +91,9 @@ RDlo: rdlo is rdlo { export rdlo; }
 
 RSlosrc: rslo is rslo { export rslo; }
 RSlosrc: rslo is rslo & rslo=0 { export 0:4; }
+
+RTlosrc: rtlo is rtlo { export rtlo; }
+RTlosrc: rtlo is rtlo & rtlo=0 { export 0:4; }
 
 # --- Catch-all unknown instruction
 
@@ -163,3 +166,34 @@ define pcodeop UnkAlu;
 :shr RDlo, RSlosrc, shamt       is op=0x3f & funct=0x083 & RDlo & RSlosrc & shamt {
     RDlo = RSlosrc >> shamt:1;
 }
+
+# --- Second screenshot
+
+# --- Memory operations: ld.d
+
+LDOFF14: offset                 is off14 [ offset = off14 << 2; ] {
+    export *[const]:4 offset;
+}
+
+:ld.d RDlo RSlosrc, LDOFF14     is op=0x19 & RDlo & RSlosrc & LDOFF14 {
+    RDlo = *[ram]:4 (RSlosrc + LDOFF14);
+}
+
+# --- Memory operations: st.d
+
+STOFF14: offset                 is stoff_hi & stoff14_lo [ offset = (stoff_hi << 11) | (stoff14_lo << 2); ] {
+    export *[const]:4 offset;
+}
+
+:st.d RTlosrc, RSlosrc, STOFF14  is op=0x1b & RTlosrc & RSlosrc & STOFF14 {
+    *[ram]:4 (RSlosrc + STOFF14) = RTlosrc;
+}
+
+:st.d! RTlosrc, RSlosrc, STOFF14 is op=0x1c & RTlosrc & RSlosrc & STOFF14 {
+    *[ram]:4 (RSlosrc + STOFF14) = RTlosrc;
+    RSlosrc = RSlosrc + STOFF14;
+}
+
+# --- Function call and return
+
+# --- Conflow flow

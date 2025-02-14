@@ -10,7 +10,6 @@ A more complete version of a Ghidra processors module for iRISC is available [he
 
 What we know about iRISC:
 =========================
-
 - Is it a big endian processor
 - Similar instruction layout to the MIPS architecture: 6 bits opcode, 5 bits per register.
 - load and store instruction does not have same encoding of the offset.
@@ -45,9 +44,9 @@ J-type:  |  6bit opcode  | 2bit jmpop |             24bit jump-offset           
 SH-type  |  6bit opcode  |  5bit rs  |   5bit rd   |   5bit shamt |   11bit funct  |
 ```
 
+
 Ghidra SLEIGH
 =============
-
 Ghidra supports for disassembling different architecture is based on a DSL called SLEIGH, every architecture that Ghidra supports has a corresponding processor module[2] which is primarily SLEIGH code and a bit of XML as glue.
 
 Documentation is available in the Ghidra repository, and we have made a copy available [here](/public/languages/)
@@ -62,6 +61,7 @@ SLEIGH consists has three different constructs 'defines', 'attachments`, 'tables
 - 'Defines': Defines certain things about the ISA such as: Endianness, Alignment, Registers, Tokens, and Token Fields, and how these relate to each other.
 - 'Attachments': Are used for attaching values(addspress space locations or numbers) to token fields.
 - 'Tables': Describes the decoding of diffrent instructions, their presentation in disassembly, and their semantics.
+
 
 Our Processors Module
 ---------------------
@@ -201,7 +201,6 @@ A few things to notice here:
 
 Trying our processor module
 ---------------------------
-
 1. Symlink the processor module into ghidra: `ln -s /path/to/custom/module /path/to/ghidra/Ghidra/Processor/iRISC`
 2. Create a new project, and import `IRON_PREP_CODE`
 3. Choose the iRISC language
@@ -215,9 +214,9 @@ We now have the following:
 This is basically where we started when we began writing our python disassembler.
 However as we have more knowlegde we can just simply implement This knowlegde in the SLEIGH language
 
+
 Improving our SLEIGH module: ALU instructions
 ---------------------------------------------
-
 Next we will make a few other opcodes:
 ```sleigh
 :add RD, RSsrc, simm16         is op=0x00 & RD & RSsrc & simm16 {
@@ -298,13 +297,52 @@ At this point in time our disassembly for the `SHA256_init` looks like this
 
 We still have much more to do...
 
+
 More instructions: Memory operations
 ------------------------------------
-TODO
+We start with the load instruction:
+```sleigh
+LDOFF14: offset                 is off14 [ offset = off14 << 2; ] {
+    export *[const]:4 offset;
+}
+
+:ld.d RDlo RSlosrc, LDOFF14     is op=0x19 & RDlo & RSlosrc & LDOFF14 {
+    RDlo = *[ram]:4 (RSlosrc + LDOFF14);
+}
+```
+
+There are many things going on here:
+- We have a subtable(`LDOFF14`) for calcualting the load offset(rememeber the 2 low bits being weird?)
+- This sub table is using 'disassembly expressions', which are calculations which happens at disassembly time and not when the instruction is executed: `[ offset = off14 << 2; ]`.
+- The semantics of that subtable is also a bit complicated, but in essence we casting a disassembly veriable(`offset`) to a constant value with a certain size of bytes by dereferenceing a address space that is an idintity map of values.
+- The way `LDOFF14` is displayed is the result of the calulation `off14 << 2` because we are displaying `offset`, this means that if `imm16` is `0x0016` then `off14` will be `0x0005` because we have discarded the 2 low bits, and then `offset` will be calculated to be `0x0014` which is the final value that we will both displayed and exported.
+- The instruction `ld.d` uses that the `LDOFF14` subtable
+- The semantics of `ld.d` dereferances the `ram` address space wit ha 4 byte access.
+
+![Load instructions](/public/ghidra-processor/img/disasm4_load.png)
+
+The `st.d` instruction is simmilar, except that the offset is split between multiple token fields:
+```sleigh
+STOFF14: offset                 is stoff_hi & stoff14_lo [ offset = (stoff_hi << 11) | (stoff14_lo << 2); ] {
+    export *[const]:4 offset;
+}
+
+:st.d RTlosrc, RSlosrc, STOFF14  is op=0x1b & RTlosrc & RSlosrc & STOFF14 {
+    *[ram]:4 (RSlosrc + STOFF14) = RTlosrc;
+}
+
+:st.d! RTlosrc, RSlosrc, STOFF14 is op=0x1c & RTlosrc & RSlosrc & STOFF14 {
+    *[ram]:4 (RSlosrc + STOFF14) = RTlosrc;
+    RSlosrc = RSlosrc + STOFF14;
+}
+```
+![Store instructions](/public/ghidra-processor/img/disasm3_store.png)
+
 
 More instructions: Function entry and return
 --------------------------------------------
 TODO
+
 
 More instructions: Function calls and branches
 ---------------------------
