@@ -195,5 +195,20 @@ STOFF14: offset                 is stoff_hi & stoff14_lo [ offset = (stoff_hi <<
 }
 
 # --- Function call and return
+define register offset=0x100 size=4 [
+    retaddr
+];
+
+:get RDlo, "retaddr"            is op=0x12 & imm16=0x00bc & RDlo {
+    RDlo = retaddr;
+}
+
+:jr RTlosrc                     is op=0x3f & funct=0x025 & RTlosrc {
+    goto [RTlosrc];
+}
+
+:ret                            is op=0x3f & funct=0x02d {
+    return [retaddr];
+}
 
 # --- Conflow flow

@@ -341,11 +341,101 @@ STOFF14: offset                 is stoff_hi & stoff14_lo [ offset = (stoff_hi <<
 
 More instructions: Function entry and return
 --------------------------------------------
-TODO
+This time we nned to fix the following instructions:
+- `unk.0x12 r3, zero, zero, 0xbc`: This you read the return address and store it in `r3`.
+- `alu.0x25 zero, r8, r3`: This needs to jump/return to `r3`
+- `alu.0x2d zero, zero, zero`: This is used to return directly to the return address in `sha256_transform`.
+
+```sleigh
+define register offset=0x100 size=4 [
+    retaddr
+];
+
+:get RDlo, "retaddr"            is op=0x12 & imm16=0x00bc & RDlo {
+    RDlo = retaddr;
+}
+
+:jr RTlosrc                     is op=0x3f & funct=0x025 & RTlosrc {
+    goto [RTlosrc];
+}
+
+:ret                            is op=0x3f & funct=0x02d {
+    return [retaddr];
+}
+```
+
+Everthing here work as one would expect, but a few comments might seem good anyway:
+- We are making a new register `retaddr`, this is in preparation for the `call` which needs to store the return addres somewhere.
+- `"retaddr"`: this is simply a string which, this is a seperate from `retaddr` the variable/register.
+- `goto`/`return`: Same semantics as far as i can tell, but they are used as hints in Ghidra's decompiler.
+
+Given all the refinements of our Ghidra processor we are now able to get a very primitive decompilation of `sha256_transform`:
+```c
+void sha256_transform(int *param_1)
+
+{
+  int iVar1;
+  undefined4 in_r4h;
+  uint uVar2;
+  uint uVar3;
+  uint uVar4;
+  uint uVar5;
+  int iVar6;
+  uint uVar7;
+  uint uVar8;
+  undefined8 uVar9;
+  undefined8 uVar10;
+  undefined8 unaff_r31;
+  
+  uVar2 = param_1[1];
+  uVar5 = param_1[0xe];
+  param_1[0x10] =
+       *param_1 + param_1[9] +
+       ((uVar5 >> 0x13 | uVar5 << 0xd) ^ uVar5 >> 10 ^ (uVar5 >> 0x11 | uVar5 << 0xf)) +
+       ((uVar2 >> 0x12 | uVar2 << 0xe) ^ uVar2 >> 3 ^ (uVar2 >> 7 | uVar2 << 0x19));
+  UnkOp(5,4,0);
+  UnkOp(0x29,0,unaff_r31);
+  uVar5 = param_1[0x4a];
+  uVar8 = param_1[0x49];
+  uVar7 = param_1[0x48];
+  iVar6 = param_1[0x47];
+  uVar4 = param_1[0x46];
+  uVar3 = param_1[0x45];
+  uVar2 = param_1[0x44];
+  uVar10 = UnkOp(2,0x5510,0);
+  uVar10 = UnkAlu(0x19,0,uVar10);
+  uVar9 = UnkAlu(0x19,CONCAT44(in_r4h,param_1),0);
+  iVar1 = ((uVar7 >> 6 | uVar7 << 0x1a) ^ (uVar7 >> 0xb | uVar7 << 0x15) ^
+          (uVar7 >> 0x19 | uVar7 << 7)) + param_1[0x4b] +
+          (uVar5 & (uVar7 ^ 0xffffffff) ^ uVar8 & uVar7) + (int)uVar10 + (int)uVar9;
+  UnkOp(5,4,0);
+  UnkOp(0x29,0,unaff_r31);
+  param_1[0x45] = uVar2 + uVar3;
+  param_1[0x44] =
+       ((uVar2 >> 2 | uVar2 << 0x1e) ^ (uVar2 >> 0xd | uVar2 << 0x13) ^
+       (uVar2 >> 0x16 | uVar2 << 10)) + (uVar2 & (uVar3 ^ uVar4) ^ uVar3 & uVar4) + iVar1 + uVar2;
+  param_1[0x46] = uVar3 + uVar4;
+  param_1[0x47] = uVar4 + iVar6;
+  param_1[0x48] = iVar1 + iVar6 + uVar7;
+  param_1[0x49] = uVar7 + uVar8;
+  param_1[0x4a] = uVar8 + uVar5;
+  param_1[0x4b] = uVar5 + param_1[0x4b];
+  return;
+}
+```
+
+There are many things wrong with this decompilation:
+- No loops or conditional jumps of any kind, this is rather obvious as we have not implemented those yet.
+- Still unknown opcodes everywhere.
+
+However there are many correct things about the decompilation as well:
+- All of the computation are correct.
+- Our load and stores are take pjuts the SHA256 state into register seems to work as expected.
+- The code does not contain all of the register spilling to stack.
 
 
 More instructions: Function calls and branches
----------------------------
+----------------------------------------------
 TODO
 
 
