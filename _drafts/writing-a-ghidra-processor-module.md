@@ -10,10 +10,12 @@ A more complete version of a Ghidra processors module for iRISC is available [he
 
 What we know about iRISC:
 =========================
+This following is the condensed knowledge of our previous two blog posts where we [analysed the firmware]({% post_url 2025-02-06-initial-firmware-analysis %}) and [found SHA256]({% post_url 2025-02-10-finding-sha256 %}):
 - Is it a big endian processor
 - Similar instruction layout to the MIPS architecture: 6 bits opcode, 5 bits per register.
 - load and store instruction does not have same encoding of the offset.
 - load and store instruction have something weird going on in the low bits of the offset.
+- The iRISC has 64 bit registers.
 - `r1` is the stack pointer
 - `r19` - `r20` are callee saved registers.
 - `r4-??`: function parameter registers.
@@ -22,7 +24,6 @@ What we know about iRISC:
 - `opcode = 0x1b`: Store instruction.
 - `opcode = 0x1c`: Store instruction, but adds offset to base address register.
 - `opcode = 0x3f`: Used for return, and other things.
-- The iRISC has 64 bit registers.
 - `opcode = 0x06,0x07,0x08,0x09`: sets 16bit words inside 64bit registers.
 - `opcode = 0x1e`: might be a 64 bit store operation.
 - `opcode = 0x25`: Is a jump/call instruction.
