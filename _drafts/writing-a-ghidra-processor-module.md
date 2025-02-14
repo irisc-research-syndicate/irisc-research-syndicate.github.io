@@ -181,7 +181,7 @@ The way tables in general works is the following:
 - Disassembly display: this is what is displayed in the disassembly view.
 - Constraints: Speficies the matching of token fields.
 - Disassembly expressions: Simple calculation, resulting in disassembly variables, which can both be used in the disassembly display or in the semantics. This can be used for coaleasing offsets that are spread over multiple token fields, as is the instance for the offset in our store instruction.
-- Semantics: Describes what the talbe is supposed to.
+- Semantics: Describes what the table is supposed to.
 
 Next we will make our first instruction, and it will be a catch-all instruction without any constraints:
 ```sleigh
@@ -196,11 +196,11 @@ This will make is no that any instruction that ghidra otherwise can't decode wil
 A few things to notice here:
 
 - `^`: simply a means to concatanate the two expressions without a space between them.
-- `UnkOp`: A custom PCODE operation that ghidra will treat as opaque and only use for dataflow analysis.
-- `op:1`: cast `op`, which is a 6bit token field to a 1 byte number. Ghidra primarily deals in byte-sized numebers.
+- `UnkOp`: A custom PCODE operation that Ghidra will treat as opaque and only use for dataflow analysis.
+- `op:1`: cast `op`, which is a 6bit token field to a 1 byte number. Ghidra primarily deals in byte-sized numbers.
 - No constraints: Even as we don't have any constraints on the instruction we still need to list which token field we want to use.
 - Sub-tables: We are using the `RSsrc`, `RTsrc`, `RD` tables we made before, and not `rd`, `rs`, and `rt` directly.
-- Tables are matched by matching the most specific constructor, this means that constructors must either be fully contained in the a diffrent constructor's constraints or be fully seperate from it. this is detailed [here](/public/languages/html/sleigh_constructors.html#sleigh_tables)
+- Tables are matched by matching the most specific constructor, this means that constructors must either be fully contained in the a diffrent constructor's constraints or be fully seperate from it. This is detailed in the [SLEIGH manual](/public/languages/html/sleigh_constructors.html#sleigh_tables)
 
 
 Trying our processor module
@@ -209,14 +209,14 @@ Trying our processor module
 2. Create a new project, and import `IRON_PREP_CODE`
 3. Choose the iRISC language
 4. Open the Ghidra CodeBrowser, and do not auto analyse.
-5. press `d` and the top of the disassembly view.
+5. press `d` at the top of the disassembly view.
 
 We now have the following:
 
 ![Our first disassembly in Ghidra](/public/ghidra-processor/img/disasm1.png)
 
 This is basically where we started when we began writing our python disassembler.
-However as we have more knowlegde we can just simply implement This knowlegde in the SLEIGH language
+However as we have more knowlegde we can just simply implement this knowlegde in the SLEIGH language
 
 
 Improving our SLEIGH module: ALU instructions
@@ -231,15 +231,15 @@ Next we will make a few other opcodes:
     RD = (RSsrc & 0x0000ffffffffffff) | (imm16 << 48);
 }
 
-:set1 RD, RSsrc, imm16         is op=0x07 & RD & RSsrc & imm16 {
+:set1 RD, RSsrc, imm16          is op=0x07 & RD & RSsrc & imm16 {
     RD = (RSsrc & 0xffff0000ffffffff) | (imm16 << 32);
 }
 
-:set3 RD, RSsrc, imm16         is op=0x08 & RD & RSsrc & imm16 {
+:set3 RD, RSsrc, imm16          is op=0x08 & RD & RSsrc & imm16 {
     RD = (RSsrc & 0xffffffffffff0000) | (imm16 << 0);
 }
 
-:set2 RD, RSsrc, imm16         is op=0x09 & RD & RSsrc & imm16 {
+:set2 RD, RSsrc, imm16          is op=0x09 & RD & RSsrc & imm16 {
     RD = (RSsrc & 0xffffffff0000ffff) | (imm16 << 16);
 }
 ```
@@ -248,7 +248,7 @@ Some things of note here:
 - `op=0x00`: We are now using constraints to match instruction based on opcodes
 - `simm16`: we are using a sign-extended version of the low 16bits.
 - Semantics: Can be complex expressions with a lot of operations.
-- `set3` and `set2`: is in the 'wrong' order: This is just how the iRISC works, nothing we can do about that.
+- `set3` and `set2`: is in the 'wrong' order: This is just how the iRISC works, nothing we can do about that. Only NVIDIA/Mellanox knows the reason for this.
 
 So far we have only dealt with instructions of the form:
 `foo <reg>, <reg>, <constant>`
@@ -291,8 +291,8 @@ define pcodeop UnkAlu;
 
 Things to note here:
 - Another catch-all instruction `alu.^funct`
-- `mv`: is really just an `or` instruction where `rt=rs`, this gives more nice disassembly.
-- `RDlo`, `RSlosrc`: similar tables to `RD` and `RSsrc` but only working on the low part of the registers.
+- `mv`: Is really just an `or` instruction where `rt=rs`, this gives nicer disassembly.
+- `RDlo`, `RSlosrc`: Similar tables to `RD` and `RSsrc` but only working on the low part of the registers.
 
 At this point in time our disassembly for the `SHA256_init` looks like this
 
@@ -320,7 +320,7 @@ There are many things going on here:
 - The semantics of that subtable is also a bit complicated, but in essence we casting a disassembly veriable(`offset`) to a constant value with a certain size of bytes by dereferenceing a address space that is an idintity map of values.
 - The way `LDOFF14` is displayed is the result of the calulation `off14 << 2` because we are displaying `offset`, this means that if `imm16` is `0x0016` then `off14` will be `0x0005` because we have discarded the 2 low bits, and then `offset` will be calculated to be `0x0014` which is the final value that we will both displayed and exported.
 - The instruction `ld.d` uses that the `LDOFF14` subtable
-- The semantics of `ld.d` dereferances the `ram` address space wit ha 4 byte access.
+- The semantics of `ld.d` dereferances the `ram` address space with a 4 byte access.
 
 ![Load instructions](/public/ghidra-processor/img/disasm4_load.png)
 
