@@ -48,7 +48,7 @@ SH-type  |  6bit opcode  |  5bit rs  |   5bit rd   |   5bit shamt |   11bit func
 Ghidra SLEIGH
 =============
 
-Ghidra supports for disassembling diffrent architecture is based on a DSL called SLEIGH, every architecture that ghidra supports has a corresponding processor module[2] which is primarily SLEIGH code and a bit of XML as glue.
+Ghidra supports for disassembling different architecture is based on a DSL called SLEIGH, every architecture that Ghidra supports has a corresponding processor module[2] which is primarily SLEIGH code and a bit of XML as glue.
 
 Documentation is available in the Ghidra repository, and we have made a copy available [here](/public/languages/)
 
@@ -58,7 +58,7 @@ The XML files contains basic information about the architecture:
 - Compiler specific information like common stack pointers, frame pointers, and other parts of the calling convention, and alignment hints for structure layout.
 
 
-SLEIGH consists has three diffrent constructs 'defines', 'attachments`, 'tables'.
+SLEIGH consists has three different constructs 'defines', 'attachments`, 'tables'.
 - 'Defines': Defines certain things about the ISA such as: Endianness, Alignment, Registers, Tokens, and Token Fields, and how these relate to each other.
 - 'Attachments': Are used for attaching values(addspress space locations or numbers) to token fields.
 - 'Tables': Describes the decoding of diffrent instructions, their presentation in disassembly, and their semantics.
@@ -213,9 +213,9 @@ We now have the following:
 ![Our first disassembly in Ghidra](/public/ghidra-processor/img/disasm1.png)
 
 This is basically where we started when we began writing our python disassembler.
-However as we have more knowlegde we can just simply implement our knowlegde in the SLEIGH lamguage
+However as we have more knowlegde we can just simply implement This knowlegde in the SLEIGH language
 
-Improving our SLEIGH module: AlU instructions
+Improving our SLEIGH module: ALU instructions
 ---------------------------------------------
 
 Next we will make a few other opcodes:
@@ -296,19 +296,20 @@ At this point in time our disassembly for the `SHA256_init` looks like this
 
 ![SHA256_init](/public/ghidra-processor/img/disasm2_sha256_init.png)
 
-We will have a much to do...
+We still have much more to do...
 
-More improvements: Memory operations
+More instructions: Memory operations
 ------------------------------------
 TODO
 
-More improvements: Function entry and return
+More instructions: Function entry and return
 --------------------------------------------
 TODO
 
-Function calls and branches
+More instructions: Function calls and branches
 ---------------------------
 TODO
+
 
 References
 ==========
