@@ -125,9 +125,10 @@ define token instr(32)
     off11=(0, 10) signed
 
     storeoff_hi=(16, 20) signed
-    storeoff_lo = (0, 10)
+    storeoff_lo=(0, 10)
 ;
 ```
+In this definition we define a token called `instr` which is 32bits long, this token consists of multiple possible overlapping fields.
 
 Then we can attach the registers to the token fields describing them:
 ```sleigh
