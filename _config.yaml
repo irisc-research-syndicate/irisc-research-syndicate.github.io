@@ -2,6 +2,7 @@
 
 plugins: 
   - "jekyll-paginate"
+  - "jekyll-feed"
 permalink: "pretty"
 
 title: "iRISC Research Syndicate"
@@ -11,3 +12,6 @@ baseurl: "/"
 
 paginate: 5
 paginate_path: "/blog/page:num/"
+
+feed:
+  excerpt_only: true
