@@ -12,7 +12,10 @@ In the privious articles we have [started with almost nothing]({% post_url 2025-
 
 Hardware overview
 =================
-TODO
+
+{: .grid }
+![100G ConnectX-5 NIC, front](/public/patching-firmware/100G_front.jpg)
+![100G ConnectX-5 NIC, back](/public/patching-firmware/100G_back.jpg)
 
 Hardware setup and availability
 -------------------------------
@@ -23,6 +26,10 @@ We have the following hardware setup for testing firmware:
 - [Mellanox ConnectX-5](https://www.ebay.com/sch/i.html?_nkw=mellanox+connectx-5+100Gb)
 
 This setup allows us to power cycle the NICs without rebooting our lab machine.
+
+{: .grid }
+![Thunderbolt EGPU Dock](/public/patching-firmware/tb_dock.jpg)
+![Full setup assembly](/public/patching-firmware/100G_tb_setup.jpg)
 
 
 Firmware security and recovery mode
