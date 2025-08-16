@@ -9,6 +9,26 @@ In this article we will explore the posibility to patch the firmware of a Connec
 
 In the privious articles we have [started with almost nothing]({% post_url 2025-02-06-initial-firmware-analysis %}) found a [SHA256 implementation in the firmware]({% post_url 2025-02-10-finding-sha256 %}) used that to gain more knowledge about the iRISC ISA, and finally we made a [basic Ghidra processor module]({% post_url 2025-02-14-writing-a-ghidra-processor-module %}). We can highly reccomend that you, the reader, review our privious work before continuing reading this article.
 
+In this blog post we will use, analyze, and modify a firmware dumped from a ConnectX-5 card sold from ebay, it is available [here](/public/patching-firmware/cx5_100G_ebay_MSF.original.bin) and has the following specifications:
+```
+$ mstflint -i cx5_100G_ebay_MSF.original.bin query
+Image type:            FS4
+FW Version:            16.30.1206
+FW Release Date:       6.10.2021
+Product Version:       rel-16_30_1206
+Rom Info:              type=UEFI version=14.23.17 cpu=AMD64,AARCH64
+                       type=PXE version=3.6.301 cpu=AMD64
+Description:           UID                GuidsNumber
+Base GUID:             e8ebd30300420d24        4
+Base MAC:              e8ebd3420d24            4
+Image VSD:             N/A
+Device VSD:            N/A
+PSID:                  MSF0000000012
+Security Attributes:   N/A
+Security Ver:          0
+```
+We cannot not guarantee that this firmware is compatible with other cards than ours which we acquired from ebay.
+
 
 Hardware overview
 =================
@@ -17,11 +37,15 @@ Hardware overview
 ![100G ConnectX-5 NIC, front](/public/patching-firmware/100G_front.jpg)
 ![100G ConnectX-5 NIC, back](/public/patching-firmware/100G_back.jpg)
 
+On the front of the NIC there is a 100G QSFP connector and the ConnectX-5 under a big heatsink, just above that 100G interface there is 2 sections of pinheaders, one with 3 pins labled with `SDA` and `SCL` indicating that it is a I2C bus, the other with 2 pins is labeled FNP/GND, we have populated the pinheaders with actual pinheader as they are normally populated.
+
+On the back of the board there is a WinBond flash IC, which likely contains the firmware, we have never dumped this chip as it was unnessesary as we can freely download the firmware from NVIDIA/Mellanox or dump the firmware through the `mstflint` tool.
+
 Hardware setup and availability
 -------------------------------
 We have the following hardware setup for testing firmware:
 - Intel NUC with Thunderbolt/USB4
-- [Thunderbolt EGPU Dock: TH3P4G3]([https://egpu.io/exp-gdc-th3p4g2-thunderbolt-gpu-dock-review/)
+- [Thunderbolt EGPU Dock: TH3P4G3](https://egpu.io/exp-gdc-th3p4g2-thunderbolt-gpu-dock-review/), this exact board allows for powering off the PCIe interface programmatically.
 - ATX Power supply for the dock.
 - [Mellanox ConnectX-5](https://www.ebay.com/sch/i.html?_nkw=mellanox+connectx-5+100Gb)
 
@@ -34,7 +58,16 @@ This setup allows us to power cycle the NICs without rebooting our lab machine.
 
 Firmware security and recovery mode
 ===================================
-TODO
+The firmware can be signed by a RSA embedded in currently running firmware on the card however the NIC can enter recovery mode if the FNP pin(just above the 100G connector) is shorted to ground.
+
+To force a new firmware onto the NIC using recovery mode th procedure is as follows:
+- Short FNP to ground
+- Power cycle the NIC.
+- The NIC will then boot into recovery mode
+- Flash the desired firmware as normal: `mstflint -d <PCI BUS ID> -i <FIRMWARE IMAGE> burn`
+- Remove short between FN and GND.
+- Power cycle the NIC, to boot into newly flashed.
+- The NIC should now be running the new firmware.
 
 
 Firmware reverse engineering
@@ -79,34 +112,37 @@ Fortunaltely the mstflint codebase has multiple [diffrent implementations](https
 
 Using that tool we begin look at the firmware:
 ```
-$ mlx5fw fw.bin show-sections
- 0 0x00007000/0x00015614 0x00710000 0x007161d8: false false IRON_PREP_CODE
- 1 0x0001c614/0x00000100 0x00000000 0x00000000: false false RESET_INFO
- 2 0x0001c748/0x003d15a0 0x00800000 0x0081d58c: false true MAIN_CODE
- 3 0x003edce8/0x00013cd0 0x00780000 0x00792e90: false false PCIE_LINK_CODE
- 4 0x004019b8/0x00000b90 0x00740000 0x007402c0: false false POST_IRON_BOOT_CODE
- 5 0x00402548/0x0002e140 0x01000000 0x01000004: false false PCI_CODE
- 6 0x00430688/0x00001ca0 0x0106ac00 0x0106ac50: false false UPGRADE_CODE
- 7 0x00432328/0x00009920 0x00000000 0x00000000: false false PHY_UC_CODE
- 8 0x0043bc48/0x00001e80 0x00000000 0x00000000: false false PCIE_PHY_UC_CODE
- 9 0x0043dac8/0x00000400 0x00000000 0x00000000: false false IMAGE_INFO
-10 0x0043dec8/0x00000b00 0x00000000 0x00000000: false false FW_MAIN_CFG
-11 0x0043e9c8/0x000004c0 0x00000000 0x00000000: false false FW_BOOT_CFG
-12 0x0043ee88/0x00000980 0x00000000 0x00000000: false false HW_MAIN_CFG
-13 0x0043f808/0x00000140 0x00000000 0x00000000: false false HW_BOOT_CFG
-14 0x0043f948/0x00002c80 0x00000000 0x00000000: false false PHY_UC_CONSTS
-15 0x004425c8/0x00000140 0x00000000 0x00000000: false false IMAGE_SIGNATURE_256
-16 0x00442708/0x00000900 0x00000000 0x00000000: false false PUBLIC_KEYS_2048
-17 0x00443008/0x00000090 0x00000000 0x00000000: false false FORBIDDEN_VERSIONS
-18 0x00443098/0x00000240 0x00000000 0x00000000: false false IMAGE_SIGNATURE_512
-19 0x004432d8/0x00001100 0x00000000 0x00000000: false false PUBLIC_KEYS_4096
-20 0x004443d8/0x000b9c28 0x00000000 0x00000000: false false ROM_CODE
-21 0x004fe000/0x00000be0 0x00000000 0x00000000: false false DBG_FW_INI
-22 0x004febe0/0x00000008 0x00000000 0x00000000: false false DBG_FW_PARAMS
-23 0x004febe8/0x00008d30 0x00000000 0x00000000: false false CRDUMP_MASK_DATA
-24 0x00507918/0x00050000 0x00000000 0x00000000: false false PROGRAMMABLE_HW_FW
+$ mlx5fw cx5_100G_ebay_MSF.original.bin show-sections
+ 0 0x00006000/0x0001302c 0x00710000 0x00715694: false false IRON_PREP_CODE
+ 1 0x0001902c/0x00000100 0x00000000 0x00000000: false false RESET_INFO
+ 2 0x0001915c/0x00393500 0x00800000 0x0080720c: false true MAIN_CODE
+ 3 0x003ac65c/0x00013850 0x00780000 0x00792a90: false false PCIE_LINK_CODE
+ 4 0x003bfeac/0x00000b30 0x00740000 0x00740260: false false POST_IRON_BOOT_CODE
+ 5 0x003c09dc/0x0003c9dc 0x01000000 0x01000004: false false PCI_CODE
+ 6 0x003fd3b8/0x0000198c 0x0106ac00 0x0106ac50: false false UPGRADE_CODE
+ 7 0x003fed44/0x00009920 0x00000000 0x00000000: false false PHY_UC_CODE
+ 8 0x00408664/0x00001e80 0x00000000 0x00000000: false false PCIE_PHY_UC_CODE
+ 9 0x0040a4e4/0x00000400 0x00000000 0x00000000: false false IMAGE_INFO
+10 0x0040a8e4/0x00000c00 0x00000000 0x00000000: false false FW_MAIN_CFG
+11 0x0040b4e4/0x00000480 0x00000000 0x00000000: false false FW_BOOT_CFG
+12 0x0040b964/0x00001600 0x00000000 0x00000000: false false HW_MAIN_CFG
+13 0x0040cf64/0x00000140 0x00000000 0x00000000: false false HW_BOOT_CFG
+14 0x0040d0a4/0x00002c80 0x00000000 0x00000000: false false PHY_UC_CONSTS
+15 0x0040fd24/0x00000140 0x00000000 0x00000000: false false IMAGE_SIGNATURE_256
+16 0x0040fe64/0x00000900 0x00000000 0x00000000: false false PUBLIC_KEYS_2048
+17 0x00410764/0x00000090 0x00000000 0x00000000: false false FORBIDDEN_VERSIONS
+18 0x004107f4/0x00000240 0x00000000 0x00000000: false false IMAGE_SIGNATURE_512
+19 0x00410a34/0x00001100 0x00000000 0x00000000: false false PUBLIC_KEYS_4096
+20 0x00411b34/0x000b0028 0x00000000 0x00000000: false false ROM_CODE
+21 0x004c1b5c/0x000007f8 0x00000000 0x00000000: false false DBG_FW_INI
+22 0x004c2354/0x00000008 0x00000000 0x00000000: false false DBG_FW_PARAMS
+23 0x004c235c/0x00010000 0x00000000 0x00000000: false false CRDUMP_MASK_DATA
+24 0x004d235c/0x00050000 0x00000000 0x00000000: false false PROGRAMMABLE_HW_FW
 ```
-From this we can see that we have a cache-line crc protected `MAIN_CODE` section, which has a load address of `0x00800000` and a entrypoint at `0x0081d58c`.
+From this we can see that we have a cache-line crc protected `MAIN_CODE` section, which has a load address of `0x00800000` with a entrypoint at `0x0081d58c`.
+
+We can use the tool to extracc the `MAIN_CODE` section from the firmware as well.
+
 
 Firmware strings
 ----------------
